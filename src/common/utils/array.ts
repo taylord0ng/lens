@@ -19,24 +19,19 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-// Common usage utils & helpers
+export type Tuple<T, N extends number> = N extends N ? number extends N ? T[] : _TupleOf<T, N, []> : never;
+type _TupleOf<T, N extends number, R extends unknown[]> = R["length"] extends N ? R : _TupleOf<T, N, [T, ...R]>;
 
-export * from "../../common/utils";
-export * from "../../common/event-emitter";
+/**
+ *
+ * @param collection
+ * @param chunkSize
+ */
+export function* chunkView<T, N extends number>(collection: T[], chunkSize: N): Iterable<Tuple<T, N>> {
+  console.assert(chunkSize >= 1, "chunkSize must be a positive number");
+  console.assert(Number.isInteger(chunkSize), "chunkSize must be an integer");
 
-export * from "./convertCpu";
-export * from "./convertMemory";
-export * from "./copyToClipboard";
-export * from "./createStorage";
-export * from "./cssNames";
-export * from "./cssVar";
-export * from "./display-booleans";
-export * from "./formatDuration";
-export * from "./interval";
-export * from "./isMiddleClick";
-export * from "./isReactNode";
-export * from "./metricUnitsToNumber";
-export * from "./name-parts";
-export * from "./prevDefault";
-export * from "./saveFile";
-export * from "./storageHelper";
+  for (let i = 0; (i + chunkSize) < collection.length; i += 1) {
+    yield collection.slice(i, i + chunkSize) as Tuple<T, N>;
+  }
+}

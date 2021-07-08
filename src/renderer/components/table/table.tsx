@@ -22,9 +22,8 @@
 import "./table.scss";
 
 import React from "react";
-import { orderBy } from "lodash";
 import { observer } from "mobx-react";
-import { boundMethod, cssNames, noop } from "../../utils";
+import { boundMethod, cssNames, Ordering, rectifyOrdering, sortCompare } from "../../utils";
 import { TableRow, TableRowElem, TableRowProps } from "./table-row";
 import { TableHead, TableHeadElem, TableHeadProps } from "./table-head";
 import type { TableCellElem } from "./table-cell";
@@ -92,7 +91,7 @@ export class Table extends React.Component<TableProps> {
     const { sortable, tableId } = this.props;
 
     if (sortable && !tableId) {
-      console.error("[Table]: sorted table requires props.tableId to be specified");
+      throw new Error("Table must have props.tableId if props.sortable is specified");
     }
   }
 
@@ -136,14 +135,50 @@ export class Table extends React.Component<TableProps> {
     return headElem;
   }
 
-  getSorted(items: any[]) {
-    const { sortBy, orderBy: order } = this.sortParams;
-    const sortingCallback = this.props.sortable[sortBy] || noop;
+  getSorted(rawItems: ItemObject[]) {
+    const { sortBy, orderBy: orderByRaw } = this.sortParams;
+    const sortingCallback = this.props.sortable[sortBy];
 
-    return orderBy(items, sortingCallback, order as any);
+    if (!sortingCallback) {
+      return rawItems;
+    }
+
+    const orderBy = orderByRaw === "asc" || orderByRaw === "desc" ? orderByRaw : "asc";
+    const sortData = rawItems.map((item, index) => ({
+      index,
+      sortBy: sortingCallback(item),
+    }));
+
+    sortData.sort((left, right) => {
+      if (!Array.isArray(left.sortBy) && !Array.isArray(right.sortBy)) {
+        return rectifyOrdering(sortCompare(left.sortBy, right.sortBy), orderBy);
+      }
+
+      const leftSortBy = [left.sortBy].flat().reverse();
+      const rightSortBy = [right.sortBy].flat().reverse();
+
+      while (leftSortBy.length > 0 && rightSortBy.length > 0) {
+        const nextLeft = leftSortBy.pop();
+        const nextRight = rightSortBy.pop();
+        const sortOrder = rectifyOrdering(sortCompare(nextLeft, nextRight), orderBy);
+
+        if (sortOrder !== Ordering.EQUAL) {
+          return sortOrder;
+        }
+      }
+
+      return rectifyOrdering(sortCompare(leftSortBy.length, rightSortBy.length), orderBy);
+    });
+
+    const res = [];
+
+    for (const { index } of sortData) {
+      res.push(rawItems[index]);
+    }
+
+    return res;
   }
 
-  @boundMethod
   protected onSort({ sortBy, orderBy }: TableSortParams) {
     setSortParams(this.props.tableId, { sortBy, orderBy });
     const { sortSyncWithUrl, onSort } = this.props;
@@ -153,9 +188,7 @@ export class Table extends React.Component<TableProps> {
       orderByUrlParam.set(orderBy);
     }
 
-    if (onSort) {
-      onSort({ sortBy, orderBy });
-    }
+    onSort?.({ sortBy, orderBy });
   }
 
   @boundMethod
