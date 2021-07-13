@@ -23,7 +23,7 @@ import "./table.scss";
 
 import React from "react";
 import { observer } from "mobx-react";
-import { boundMethod, cssNames, Ordering, rectifyOrdering, sortCompare } from "../../utils";
+import { boundMethod, cssNames } from "../../utils";
 import { TableRow, TableRowElem, TableRowProps } from "./table-row";
 import { TableHead, TableHeadElem, TableHeadProps } from "./table-head";
 import type { TableCellElem } from "./table-cell";
@@ -32,6 +32,7 @@ import { createPageParam } from "../../navigation";
 import type { ItemObject } from "../../item.store";
 import { getSortParams, setSortParams } from "./table.storage";
 import { computed, makeObservable } from "mobx";
+import { getSorted } from "./sorting";
 
 export type TableSortBy = string;
 export type TableOrderBy = "asc" | "desc" | string;
@@ -137,46 +138,8 @@ export class Table extends React.Component<TableProps> {
 
   getSorted(rawItems: ItemObject[]) {
     const { sortBy, orderBy: orderByRaw } = this.sortParams;
-    const sortingCallback = this.props.sortable[sortBy];
 
-    if (!sortingCallback) {
-      return rawItems;
-    }
-
-    const orderBy = orderByRaw === "asc" || orderByRaw === "desc" ? orderByRaw : "asc";
-    const sortData = rawItems.map((item, index) => ({
-      index,
-      sortBy: sortingCallback(item),
-    }));
-
-    sortData.sort((left, right) => {
-      if (!Array.isArray(left.sortBy) && !Array.isArray(right.sortBy)) {
-        return rectifyOrdering(sortCompare(left.sortBy, right.sortBy), orderBy);
-      }
-
-      const leftSortBy = [left.sortBy].flat().reverse();
-      const rightSortBy = [right.sortBy].flat().reverse();
-
-      while (leftSortBy.length > 0 && rightSortBy.length > 0) {
-        const nextLeft = leftSortBy.pop();
-        const nextRight = rightSortBy.pop();
-        const sortOrder = rectifyOrdering(sortCompare(nextLeft, nextRight), orderBy);
-
-        if (sortOrder !== Ordering.EQUAL) {
-          return sortOrder;
-        }
-      }
-
-      return rectifyOrdering(sortCompare(leftSortBy.length, rightSortBy.length), orderBy);
-    });
-
-    const res = [];
-
-    for (const { index } of sortData) {
-      res.push(rawItems[index]);
-    }
-
-    return res;
+    return getSorted(rawItems, this.props.sortable[sortBy], orderByRaw);
   }
 
   protected onSort({ sortBy, orderBy }: TableSortParams) {
