@@ -23,10 +23,11 @@ import { action, comparer, observable, makeObservable } from "mobx";
 import { BaseStore } from "./base-store";
 import migrations from "../migrations/hotbar-store";
 import * as uuid from "uuid";
-import isNull from "lodash/isNull";
 import { toJS } from "./utils";
 import { CatalogEntity } from "./catalog";
 import { catalogEntity } from "../main/catalog-sources/general";
+import { Notifications } from "../renderer/components/notifications";
+import logger from "../main/logger";
 
 export interface HotbarItem {
   entity: {
@@ -93,29 +94,6 @@ export class HotbarStore extends BaseStore<HotbarStoreModel> {
     return [...Array.from(Array(defaultHotbarCells).fill(null))];
   }
 
-  @action
-  protected fromStore(data: Partial<HotbarStoreModel> = {}) {
-    if (!data.hotbars || !data.hotbars.length) {
-      this.hotbars = [{
-        id: uuid.v4(),
-        name: "Default",
-        items: this.defaultHotbarInitialItems,
-      }];
-    } else {
-      this.hotbars = data.hotbars;
-    }
-
-    if (data.activeHotbarId) {
-      if (this.getById(data.activeHotbarId)) {
-        this.activeHotbarId = data.activeHotbarId;
-      }
-    }
-
-    if (!this.activeHotbarId) {
-      this.activeHotbarId = this.hotbars[0].id;
-    }
-  }
-
   get defaultHotbarInitialItems() {
     const { metadata: { uid, name, source } } = catalogEntity;
     const initialItem = { entity: { uid, name, source }};
@@ -163,7 +141,7 @@ export class HotbarStore extends BaseStore<HotbarStoreModel> {
   }
 
   @action
-  addToHotbar(item: CatalogEntity, cellIndex = -1) {
+  addToHotbar(item: CatalogEntity, cellIndex?: number) {
     const hotbar = this.getActive();
     const newItem = { entity: {
       uid: item.metadata.uid,
@@ -175,18 +153,19 @@ export class HotbarStore extends BaseStore<HotbarStoreModel> {
       return;
     }
 
-    if (cellIndex == -1) {
+    if (cellIndex === undefined) {
       // Add item to empty cell
-      const emptyCellIndex = hotbar.items.findIndex(isNull);
+      const emptyCellIndex = hotbar.items.indexOf(null);
 
       if (emptyCellIndex != -1) {
         hotbar.items[emptyCellIndex] = newItem;
       } else {
-        // Add new item to the end of list
-        hotbar.items.push(newItem);
+        Notifications.error(`Cannot have more than ${defaultHotbarCells} items pinned to a hotbar`);
       }
-    } else {
+    } else if (0 <= cellIndex && cellIndex <= hotbar.items.length) {
       hotbar.items[cellIndex] = newItem;
+    } else {
+      logger.error(`[HOTBAR-STORE]: cannot pin entity to hotbar outside of index range`, { entityId: item.getId(), hotbarId: hotbar.id, cellIndex, });
     }
   }
 
@@ -277,6 +256,31 @@ export class HotbarStore extends BaseStore<HotbarStoreModel> {
     hotbarStore.activeHotbarId = hotbarStore.hotbars[index].id;
   }
 
+  @action
+  protected fromStore(data: Partial<HotbarStoreModel> = {}) {
+    if (!data.hotbars || !data.hotbars.length) {
+      this.hotbars = [{
+        id: uuid.v4(),
+        name: "Default",
+        items: this.defaultHotbarInitialItems,
+      }];
+    } else {
+      this.hotbars = data.hotbars;
+    }
+
+    this.hotbars.forEach(ensureExactHotbarItemLength);
+
+    if (data.activeHotbarId) {
+      if (this.getById(data.activeHotbarId)) {
+        this.activeHotbarId = data.activeHotbarId;
+      }
+    }
+
+    if (!this.activeHotbarId) {
+      this.activeHotbarId = this.hotbars[0].id;
+    }
+  }
+
   toJSON(): HotbarStoreModel {
     const model: HotbarStoreModel = {
       hotbars: this.hotbars,
@@ -284,5 +288,34 @@ export class HotbarStore extends BaseStore<HotbarStoreModel> {
     };
 
     return toJS(model);
+  }
+}
+
+/**
+ * This function ensures that there are always exactly `defaultHotbarCells`
+ * worth of items in the hotbar.
+ * @param hotbar The hotbar to modify
+ */
+function ensureExactHotbarItemLength(hotbar: Hotbar) {
+  if (hotbar.items.length === defaultHotbarCells) {
+    // if we already have `defaultHotbarCells` then we are good to stop
+    return;
+  }
+
+  // otherwise, keep adding empty entries until full
+  while (hotbar.items.length < defaultHotbarCells) {
+    hotbar.items.push(null);
+  }
+
+  // if for some reason the hotbar was overfilled before, remove as many entries
+  // as needed, but prefer empty slots and items at the end first.
+  while (hotbar.items.length > defaultHotbarCells) {
+    const lastNull = hotbar.items.lastIndexOf(null);
+
+    if (lastNull >= 0) {
+      hotbar.items.splice(lastNull, 1);
+    } else {
+      hotbar.items.length = defaultHotbarCells;
+    }
   }
 }
