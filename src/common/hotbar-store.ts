@@ -26,8 +26,8 @@ import * as uuid from "uuid";
 import { toJS } from "./utils";
 import { CatalogEntity } from "./catalog";
 import { catalogEntity } from "../main/catalog-sources/general";
-import { Notifications } from "../renderer/components/notifications";
 import logger from "../main/logger";
+import { ipcRenderer } from "electron";
 
 export interface HotbarItem {
   entity: {
@@ -160,7 +160,12 @@ export class HotbarStore extends BaseStore<HotbarStoreModel> {
       if (emptyCellIndex != -1) {
         hotbar.items[emptyCellIndex] = newItem;
       } else {
-        Notifications.error(`Cannot have more than ${defaultHotbarCells} items pinned to a hotbar`);
+        if (ipcRenderer) {
+          import("../renderer/components/notifications")
+            .then(({ Notifications }) => {
+              Notifications.error(`Cannot have more than ${defaultHotbarCells} items pinned to a hotbar`);
+            });
+        }
       }
     } else if (0 <= cellIndex && cellIndex <= hotbar.items.length) {
       hotbar.items[cellIndex] = newItem;
