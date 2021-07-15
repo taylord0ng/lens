@@ -162,7 +162,7 @@ export class HotbarStore extends BaseStore<HotbarStoreModel> {
       } else {
         broadcastMessage(HotbarTooManyItems);
       }
-    } else if (0 <= cellIndex && cellIndex <= hotbar.items.length) {
+    } else if (0 <= cellIndex && cellIndex < hotbar.items.length) {
       hotbar.items[cellIndex] = newItem;
     } else {
       logger.error(`[HOTBAR-STORE]: cannot pin entity to hotbar outside of index range`, { entityId: item.getId(), hotbarId: hotbar.id, cellIndex, });
