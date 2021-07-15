@@ -29,7 +29,7 @@ import * as ReactRouterDom from "react-router-dom";
 import * as LensExtensionsCommonApi from "../extensions/common-api";
 import * as LensExtensionsRendererApi from "../extensions/renderer-api";
 import { render, unmountComponentAtNode } from "react-dom";
-import { delay } from "../common/utils";
+import { CreateSingletons, delay } from "../common/utils";
 import { isMac, isDevelopment } from "../common/vars";
 import { ClusterStore } from "../common/cluster-store";
 import { UserStore } from "../common/user-store";
@@ -38,7 +38,6 @@ import { ExtensionLoader } from "../extensions/extension-loader";
 import { App } from "./components/app";
 import { LensApp } from "./lens-app";
 import { HelmRepoManager } from "../main/helm/helm-repo-manager";
-import { ExtensionInstallationStateStore } from "./components/+extensions/extension-install.store";
 import { DefaultProps } from "./mui-base-theme";
 import configurePackages from "../common/configure-packages";
 import * as initializers from "./initializers";
@@ -84,40 +83,41 @@ export async function bootstrap(App: AppComponent) {
   initializers.initCatalog();
   initializers.initIpcRendererListeners();
 
-  ExtensionLoader.createInstance().init();
-  ExtensionDiscovery.createInstance().init();
-
-  UserStore.createInstance();
-
   SentryInit();
 
-  // ClusterStore depends on: UserStore
-  const cs = ClusterStore.createInstance();
+  CreateSingletons.begin()
+    .declare(ExtensionLoader)
+    .declare(ExtensionDiscovery)
+    .declare(UserStore)
+    .declare(ExtensionsStore)
+    .declare(FilesystemProvisionerStore)
+    .declare(WeblinkStore)
+    .declare(HelmRepoManager)
+    .declare(ClusterStore, {
+      requires: [UserStore],
+    })
+    .declare(HotbarStore, {
+      requires: [ClusterStore],
+    })
+    .declare(ThemeStore, {
+      requires: [UserStore],
+    })
+    .declare(TerminalStore, {
+      requires: [ThemeStore],
+    })
+    .buildAll();
 
-  await cs.loadInitialOnRenderer();
+  ExtensionLoader.getInstance().init();
+  ExtensionDiscovery.getInstance().init();
 
-  // HotbarStore depends on: ClusterStore
-  HotbarStore.createInstance();
-  ExtensionsStore.createInstance();
-  FilesystemProvisionerStore.createInstance();
-
-  // ThemeStore depends on: UserStore
-  ThemeStore.createInstance();
-
-  // TerminalStore depends on: ThemeStore
-  TerminalStore.createInstance();
-  WeblinkStore.createInstance();
-
-  ExtensionInstallationStateStore.bindIpcListeners();
-  HelmRepoManager.createInstance(); // initialize the manager
+  await ClusterStore.getInstance().loadInitialOnRenderer();
 
   // Register additional store listeners
-  cs.registerIpcListener();
+  ClusterStore.getInstance().registerIpcListener();
 
   // init app's dependencies if any
-  if (App.init) {
-    await App.init();
-  }
+  await App.init?.();
+
   window.addEventListener("message", (ev: MessageEvent) => {
     if (ev.data === "teardown") {
       UserStore.getInstance(false)?.unregisterIpcListener();

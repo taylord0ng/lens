@@ -88,3 +88,94 @@ export class Singleton {
 }
 
 export default Singleton;
+
+interface CreateRequirements<T extends typeof Singleton> {
+  builds: T,
+  args?: ConstructorParameters<T> | (() => ConstructorParameters<T>),
+  requires?: Iterable<typeof Singleton>,
+}
+
+interface DeclareOpts {
+  requires?: Iterable<typeof Singleton>,
+
+}
+
+/**
+ * A builder class for declaring the dependency graph of a set of singletons
+ *
+ * This is useful because it allows the code to declare the requirements
+ */
+export class CreateSingletons {
+  rawRequirements: CreateRequirements<typeof Singleton>[] = [];
+
+  private constructor() {
+    //
+  }
+
+  static begin(): CreateSingletons {
+    return new CreateSingletons();
+  }
+
+  /**
+   * Add a Singleton that requires no arguments to build
+   * @param builds The constructor which must be a type that extends Singleton
+   * @param opts The optional singletons that must be required before this can be created
+   * @returns the builder
+   */
+  declare<T>(builds: StaticThis<T, []>, opts: DeclareOpts = {}): this {
+    this.rawRequirements.push({
+      builds: builds as any,
+      ...opts,
+    });
+
+    return this;
+  }
+
+  declareWithArgs<T, R extends any[]>(builds: StaticThis<T, R>, args: R | (() => R), opts: DeclareOpts = {}): this {
+    this.rawRequirements.push({
+      builds: builds as any,
+      args: args as any,
+      ...opts,
+    });
+
+    return this;
+  }
+
+  buildAll(): void {
+    const requirements = this.rawRequirements.map(({ builds, requires, args }) => ({
+      builds,
+      requires: new Set(requires ?? []),
+      args,
+    }));
+
+    while (requirements.length > 0) {
+      const nextSatisfiedIndex = requirements.findIndex(creation => creation.requires.size === 0);
+
+      if (nextSatisfiedIndex < 0) {
+        throw new Error("Circular dependency for Singleton creation");
+      }
+
+      const [{ builds, args }] = requirements.splice(nextSatisfiedIndex, 1);
+
+      if (builds.createInstance !== Singleton.createInstance) {
+        throw new TypeError("Builds is not T extends Singleton");
+      }
+
+      if (args) {
+        const resolvedArgs = typeof args === "function"
+          ? args()
+          : args;
+
+        builds.createInstance(...resolvedArgs);
+      } else {
+        builds.createInstance();
+      }
+
+      for (const requirement of requirements) {
+        requirement.requires.delete(builds);
+      }
+    }
+
+    this.rawRequirements.length = 0;
+  }
+}

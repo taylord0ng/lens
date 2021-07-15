@@ -41,7 +41,7 @@ import { InstalledExtension, ExtensionDiscovery } from "../extensions/extension-
 import type { LensExtensionId } from "../extensions/lens-extension";
 import { installDeveloperTools } from "./developer-tools";
 import { LensProtocolRouterMain } from "./protocol-handler";
-import { disposer, getAppVersion, getAppVersionFromProxyServer } from "../common/utils";
+import { CreateSingletons, disposer, getAppVersion, getAppVersionFromProxyServer } from "../common/utils";
 import { bindBroadcastHandlers, ipcMainOn } from "../common/ipc";
 import { startUpdateChecking } from "./app-updater";
 import { IpcRendererNavigationEvents } from "../renderer/navigation/events";
@@ -131,9 +131,6 @@ app.on("ready", async () => {
 
   registerFileProtocol("static", __static);
 
-  PrometheusProviderRegistry.createInstance();
-  initializers.initPrometheusProviderRegistry();
-
   /**
    * The following sync MUST be done before HotbarStore creation, because that
    * store has migrations that will remove items that previous migrations add
@@ -143,29 +140,36 @@ app.on("ready", async () => {
 
   logger.info("💾 Loading stores");
 
-  UserStore.createInstance().startMainReactions();
+  CreateSingletons.begin()
+    .declare(ClusterManager, {
+      requires: [ClusterStore],
+    })
+    .declare(KubeconfigSyncManager)
+    .declareWithArgs(LensProxy, [
+      handleWsUpgrade,
+      req => ClusterManager.getInstance().getClusterForRequest(req),
+    ])
+    .declare(ClusterStore, {
+      requires: [UserStore],
+    })
+    .declare(HotbarStore, {
+      requires: [ClusterStore],
+    })
+    .declare(PrometheusProviderRegistry)
+    .declare(UserStore)
+    .declare(ExtensionsStore)
+    .declare(FilesystemProvisionerStore)
+    .declare(WeblinkStore)
+    .declare(HelmRepoManager)
+    .buildAll();
 
-  // ClusterStore depends on: UserStore
-  ClusterStore.createInstance().provideInitialFromMain();
-
-  // HotbarStore depends on: ClusterStore
-  HotbarStore.createInstance();
-
-  ExtensionsStore.createInstance();
-  FilesystemProvisionerStore.createInstance();
-  WeblinkStore.createInstance();
+  UserStore.getInstance().startMainReactions();
+  ClusterStore.getInstance().provideInitialFromMain();
 
   syncWeblinks();
+  initializers.initPrometheusProviderRegistry();
 
-  HelmRepoManager.createInstance(); // create the instance
-
-  const lensProxy = LensProxy.createInstance(
-    handleWsUpgrade,
-    req => ClusterManager.getInstance().getClusterForRequest(req),
-  );
-
-  ClusterManager.createInstance().init();
-  KubeconfigSyncManager.createInstance();
+  const lensProxy = LensProxy.getInstance();
 
   try {
     logger.info("🔌 Starting LensProxy");
