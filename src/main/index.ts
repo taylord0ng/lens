@@ -165,6 +165,7 @@ app.on("ready", async () => {
 
   UserStore.getInstance().startMainReactions();
   ClusterStore.getInstance().provideInitialFromMain();
+  ClusterManager.getInstance().init();
 
   syncWeblinks();
   initializers.initPrometheusProviderRegistry();

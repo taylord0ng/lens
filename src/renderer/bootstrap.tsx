@@ -48,6 +48,7 @@ import { FilesystemProvisionerStore } from "../main/extension-filesystem";
 import { ThemeStore } from "./theme.store";
 import { SentryInit } from "../common/sentry";
 import { TerminalStore } from "./components/dock/terminal.store";
+import { ExtensionInstallationStateStore } from "./components/+extensions/extension-install.store";
 
 configurePackages();
 
@@ -109,6 +110,7 @@ export async function bootstrap(App: AppComponent) {
 
   ExtensionLoader.getInstance().init();
   ExtensionDiscovery.getInstance().init();
+  ExtensionInstallationStateStore.bindIpcListeners();
 
   await ClusterStore.getInstance().loadInitialOnRenderer();
 
