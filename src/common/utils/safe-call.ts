@@ -19,40 +19,13 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-/**
- * A function that does nothing
- */
-export function noop<T extends any[]>(...args: T): void {
-  return void args;
+type MaybeParameters<T> = T extends (...args: any) => any ? Parameters<T> : [];
+type MaybeReturnType<T> = T extends (...args: any) => any ? ReturnType<T> : undefined;
+
+export function safeCall<T>(fn: T, ...args: MaybeParameters<T>): MaybeReturnType<T> | undefined {
+  if (typeof fn !== "function") {
+    return undefined;
+  }
+
+  return fn(...(args as any[]));
 }
-
-export * from "./app-version";
-export * from "./autobind";
-export * from "./base64";
-export * from "./camelCase";
-export * from "./cloneJson";
-export * from "./debouncePromise";
-export * from "./defineGlobal";
-export * from "./delay";
-export * from "./disposer";
-export * from "./downloadFile";
-export * from "./escapeRegExp";
-export * from "./extended-map";
-export * from "./getRandId";
-export * from "./hash-set";
-export * from "./n-fircate";
-export * from "./openExternal";
-export * from "./paths";
-export * from "./reject-promise";
-export * from "./safe-call";
-export * from "./singleton";
-export * from "./sort-compare";
-export * from "./splitArray";
-export * from "./tar";
-export * from "./toggle-set";
-export * from "./toJS";
-export * from "./type-narrowing";
-
-import * as iter from "./iter";
-
-export { iter };

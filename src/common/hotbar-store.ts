@@ -23,7 +23,7 @@ import { action, comparer, observable, makeObservable } from "mobx";
 import { BaseStore } from "./base-store";
 import migrations from "../migrations/hotbar-store";
 import * as uuid from "uuid";
-import { toJS } from "./utils";
+import { safeCall, toJS } from "./utils";
 import { CatalogEntity } from "./catalog";
 import { catalogEntity } from "../main/catalog-sources/general";
 import logger from "../main/logger";
@@ -143,13 +143,25 @@ export class HotbarStore extends BaseStore<HotbarStoreModel> {
   @action
   addToHotbar(item: CatalogEntity, cellIndex?: number) {
     const hotbar = this.getActive();
+    const uid = safeCall(item?.getId);
+    const name = safeCall(item?.getName);
+
+    if (typeof uid !== "string") {
+      throw new TypeError("CatalogEntity.getId() must return a string");
+    }
+
+    if (typeof name !== "string") {
+      throw new TypeError("CatalogEntity.getName() must return a string");
+    }
+
     const newItem = { entity: {
-      uid: item.metadata.uid,
-      name: item.metadata.name,
-      source: item.metadata.source
+      uid,
+      name,
+      source: item.metadata.source,
     }};
 
-    if (hotbar.items.find(i => i?.entity.uid === item.metadata.uid)) {
+
+    if (hotbar.items.find(i => i?.entity.uid === uid)) {
       return;
     }
 
@@ -165,16 +177,16 @@ export class HotbarStore extends BaseStore<HotbarStoreModel> {
     } else if (0 <= cellIndex && cellIndex < hotbar.items.length) {
       hotbar.items[cellIndex] = newItem;
     } else {
-      logger.error(`[HOTBAR-STORE]: cannot pin entity to hotbar outside of index range`, { entityId: item.getId(), hotbarId: hotbar.id, cellIndex, });
+      logger.error(`[HOTBAR-STORE]: cannot pin entity to hotbar outside of index range`, { entityId: uid, hotbarId: hotbar.id, cellIndex, });
     }
   }
 
   @action
   removeFromHotbar(uid: string): void {
     const hotbar = this.getActive();
-    const index = hotbar.items.findIndex((i) => i?.entity.uid === uid);
+    const index = hotbar.items.findIndex(item => item?.entity.uid === uid);
 
-    if (index == -1) {
+    if (index < 0) {
       return;
     }
 
@@ -188,13 +200,10 @@ export class HotbarStore extends BaseStore<HotbarStoreModel> {
    */
   @action
   removeAllHotbarItems(uid: string) {
-    const undoItems: [Hotbar, number, HotbarItem][] = [];
-
     for (const hotbar of this.hotbars) {
       const index = hotbar.items.findIndex((i) => i?.entity.uid === uid);
 
       if (index >= 0) {
-        undoItems.push([hotbar, index, hotbar.items[index]]);
         hotbar.items[index] = null;
       }
     }
